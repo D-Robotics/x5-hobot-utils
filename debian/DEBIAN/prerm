@@ -1,0 +1,5 @@
+#!/bin/bash
+
+systemctl disable hobot-usb-gadget.service
+
+exit 0

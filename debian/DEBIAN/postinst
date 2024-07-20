@@ -1,0 +1,6 @@
+#!/bin/bash
+
+systemctl enable hobot-usb-gadget.service
+systemctl start hobot-usb-gadget.service
+
+exit 0

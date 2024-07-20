@@ -1,0 +1,10 @@
+[Unit]
+Description=Start usb gadget at startup.
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart= /etc/init.d/usb-gadget.sh start rndis &
+
+[Install]
+WantedBy=multi-user.target
