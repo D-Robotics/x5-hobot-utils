@@ -1,0 +1,99 @@
+#!/bin/sh
+
+mount_dir=/mnt
+
+if [ $# -gt 0 ]; then
+    mount_dir=$1
+fi
+echo "mount_dir: $mount_dir"
+
+#install tools
+sudo apt update
+sudo apt-get -y install rsync dosfstools parted kpartx exfat-fuse
+
+img=$mount_dir/rdk-`date +%Y%m%d-%H%M`.img
+
+echo ===================== part 1, create a new blank img ===============================
+# New img file
+#sudo rm $img
+bootsz=`df -P | grep /boot/config | awk '{print $2}'`
+rootsz=`df -P | grep /dev/root | awk '{print $3}'`
+totalsz=`echo $bootsz $rootsz | awk '{print int(($1+$2)*1.2)}'`
+echo "totalsz=$totalsz"
+sudo dd if=/dev/zero of=$img bs=1K count=$totalsz
+
+# format virtual disk
+bootstart=`sudo fdisk -l /dev/mmcblk1 | grep mmcblk1p1 | awk '{print $2}'`
+bootend=`sudo fdisk -l /dev/mmcblk1 | grep mmcblk1p1 | awk '{print $3}'`
+rootstart=`sudo fdisk -l /dev/mmcblk1 | grep mmcblk1p2 | awk '{print $3}'`
+echo "boot: $bootstart >>> $bootend, root: $rootstart >>> end"
+
+sudo parted $img --script -- mklabel msdos
+sudo parted $img --script -- mkpart primary fat32 ${bootstart}s ${bootend}s
+sudo parted $img --script -- mkpart primary ext4 ${rootstart}s -1
+sudo parted $img set 2 boot on
+sudo parted $img print
+
+sleep 2
+
+loopdevice=`sudo losetup -f --show $img`
+device=/dev/mapper/`sudo kpartx -va $loopdevice | sed -E 's/.*(loop[0-9])p.*/\1/g' | head -1`
+echo "device=$device"
+
+sleep 5
+sudo mkfs.vfat ${device}p1
+sudo mkfs.ext4 ${device}p2
+
+echo ===================== part 2, fill the data to img =========================
+# mount partitions
+mountbc=$mount_dir/backup_boot_config/
+mountr=$mount_dir/backup_root/
+mkdir -p $mountbc $mountr
+# backup /boot
+sudo mount -t vfat ${device}p1 $mountbc
+sudo cp -rfp /boot/config/* $mountbc
+sync
+echo "...Boot partition done"
+sleep 2
+# backup /root
+sudo mount -t ext4 ${device}p2 $mountr
+sudo rsync --force -rltWDEgop --delete --stats \
+    --exclude "/dev" \
+	--exclude "/media" \
+    --exclude "/proc" \
+    --exclude "/run" \
+    --exclude "/sys" \
+    --exclude "/tmp" \
+    --exclude "/lost+found" \
+	--exclude "/boot/config" \
+	--exclude "$mount_dir" \
+	// $mountr
+# special dirs 
+for i in dev media proc run sys boot/config; do
+	if [ ! -d $mountr/$i ]; then
+		sudo mkdir $mountr/$i
+	fi
+done
+if [ ! -d $mountr$mount_dir ]; then
+	sudo mkdir $mountr$mount_dir
+fi
+if [ ! -d $mountr/tmp ]; then
+	sudo mkdir $mountr/tmp
+	sudo chmod a+w $mountr/tmp
+fi
+sudo rm -f $mountr/etc/.do_resizefs_app
+sudo rm -f $mountr/etc/.do_expand_partiton
+sudo rm -f $mountr/etc/.do_resizefs_rootfs
+
+sync 
+echo "...Root partition done"
+
+sudo umount $mountbc
+sudo umount $mountr
+
+# umount loop device
+sudo kpartx -d $loopdevice
+sudo losetup -d $loopdevice
+rm -rf $mountbc $mountr
+echo "==== All done. You can un-plug the backup device"
+
