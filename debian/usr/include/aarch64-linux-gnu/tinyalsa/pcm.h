@@ -178,10 +178,6 @@ enum pcm_format {
     PCM_FORMAT_S24_3BE,
     /** Signed, 32-bit, big endian */
     PCM_FORMAT_S32_BE,
-    /** 32-bit float, little endian */
-    PCM_FORMAT_FLOAT_LE,
-    /** 32-bit float, big endian */
-    PCM_FORMAT_FLOAT_BE,
     /** Max of the enumeration list, not an actual format. */
     PCM_FORMAT_MAX
 };
@@ -217,16 +213,16 @@ struct pcm_config {
      * silence_size      : 0
      */
     /** The minimum number of frames required to start the PCM */
-    unsigned long start_threshold;
+    unsigned int start_threshold;
     /** The minimum number of frames required to stop the PCM */
-    unsigned long stop_threshold;
+    unsigned int stop_threshold;
     /** The minimum number of frames to silence the PCM */
-    unsigned long silence_threshold;
+    unsigned int silence_threshold;
     /** The number of frames to overwrite the playback buffer when the playback underrun is greater
      * than the silence threshold */
-    unsigned long silence_size;
+    unsigned int silence_size;
 
-    unsigned long avail_min;
+    unsigned int avail_min;
 };
 
 /** Enumeration of a PCM's hardware parameters.
@@ -321,6 +317,8 @@ int pcm_set_config(struct pcm *pcm, const struct pcm_config *config);
 
 unsigned int pcm_format_to_bits(enum pcm_format format);
 
+const char *pcm_format_description(enum pcm_format format);
+
 unsigned int pcm_get_buffer_size(const struct pcm *pcm);
 
 unsigned int pcm_frames_to_bytes(const struct pcm *pcm, unsigned int frames);
@@ -360,8 +358,6 @@ int pcm_unlink(struct pcm *pcm);
 int pcm_prepare(struct pcm *pcm);
 
 int pcm_start(struct pcm *pcm);
-
-int pcm_drain(struct pcm *pcm);
 
 int pcm_stop(struct pcm *pcm);
 
