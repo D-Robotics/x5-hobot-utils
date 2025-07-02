@@ -20,13 +20,15 @@ bootsz=`df -P | grep /boot/config | awk '{print $2}'`
 rootsz=`df -P | grep /dev/root | awk '{print $3}'`
 totalsz=`echo $bootsz $rootsz | awk '{print int(($1+$2)*1.2)}'`
 echo "totalsz=$totalsz"
+devbase=$(findmnt -n -o SOURCE / | sed -E 's/p?[0-9]+$//')
+bootstart=$(sudo fdisk -l "$devbase" | grep "${devbase}p1" | awk '{for(i=1;i<=NF;i++) if ($i ~ /^[0-9]+$/) {print $i; exit}}')
+bootend=$(sudo fdisk -l "$devbase" | grep "${devbase}p1" | awk '{n=0; for(i=1;i<=NF;i++) if($i ~ /^[0-9]+$/) {n++; if(n==2){print $i; exit}}}')
+rootstart=$(sudo fdisk -l "$devbase" | grep "${devbase}p2" | awk '{for(i=1;i<=NF;i++) if ($i ~ /^[0-9]+$/) {print $i; exit}}')
+echo "boot: $bootstart >>> $bootend, root: $rootstart >>> end"
+
 sudo dd if=/dev/zero of=$img bs=1K count=$totalsz
 
 # format virtual disk
-bootstart=`sudo fdisk -l /dev/mmcblk1 | grep mmcblk1p1 | awk '{print $2}'`
-bootend=`sudo fdisk -l /dev/mmcblk1 | grep mmcblk1p1 | awk '{print $3}'`
-rootstart=`sudo fdisk -l /dev/mmcblk1 | grep mmcblk1p2 | awk '{print $3}'`
-echo "boot: $bootstart >>> $bootend, root: $rootstart >>> end"
 
 sudo parted $img --script -- mklabel msdos
 sudo parted $img --script -- mkpart primary fat32 ${bootstart}s ${bootend}s
