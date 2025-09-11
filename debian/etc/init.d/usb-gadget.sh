@@ -1284,6 +1284,8 @@ start)
             USER_CONFIG=.rndis-config
         elif [ $2 == "ecm" ]; then
             USER_CONFIG=.ecm-config
+        elif [ $2 == "rndis-ecm" ]; then
+            USER_CONFIG=.rndis-ecm-config
         elif [ $2 == "uvc-rndis" ]; then
             USER_CONFIG=.uvc-rndis-config
         elif [ $2 == "uvc-rndis-uac1" ]; then
