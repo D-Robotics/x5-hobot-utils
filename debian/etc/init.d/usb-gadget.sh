@@ -1217,6 +1217,8 @@ usage()
     echo "      msd-ram                     run as gadget mass storage device(with ddr storage)"
     echo "      hid                         run as hid gadget"
     echo "      rndis                       run as rndis gadget"
+    echo "      rndis-ecm-msd               run as rndis + ecm gadget"
+    echo "      rndis                       run as rndis + ecm + msd gadget"
     echo "      ecm                         run as cdc ether gadget"
     echo "      uvc                         run as uvc gadget"
     echo "      uac1                        usb audio class specification 1"
@@ -1286,6 +1288,8 @@ start)
             USER_CONFIG=.ecm-config
         elif [ $2 == "rndis-ecm" ]; then
             USER_CONFIG=.rndis-ecm-config
+        elif [ $2 == "rndis-ecm-msd" ]; then
+            USER_CONFIG=.rndis-ecm-msd-config
         elif [ $2 == "uvc-rndis" ]; then
             USER_CONFIG=.uvc-rndis-config
         elif [ $2 == "uvc-rndis-uac1" ]; then
