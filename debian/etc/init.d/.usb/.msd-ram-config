@@ -21,3 +21,4 @@ USE_MSD=true
 MSD_FILE=/dev/shm/msd_ram.img
 MSD_BLOCK_SIZE=512              # 512M (1M per block)
 MSD_BLOCK_AUTO_MOUNT=true       # auto mount in /media/mass_storage
+MSD_BLOCK_READONLY=false

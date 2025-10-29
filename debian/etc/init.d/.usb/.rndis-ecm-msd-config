@@ -25,7 +25,9 @@ USE_ECM=true
 # Mass Storage Device
 USE_MSD=true
 MSD_FILE=/etc/init.d/.usb/rdkstudio.img
-MSD_BLOCK_AUTO_MOUNT=true       # auto mount in /media/mass_storage
+MSD_BLOCK_SIZE=128              # 128M (1M per block)
+MSD_BLOCK_AUTO_MOUNT=false       # auto mount in /media/mass_storage
+MSD_BLOCK_READONLY=true
 
 # single interface rndis still use multi-interface composite class for win10
 IS_MULTI_FUNC=true

@@ -900,6 +900,8 @@ create_msd() {
     MSD_STORE=$3
     MSD_BLOCK_SIZE=$4
     MSD_AUTO_MOUNT=$5
+    MSD_READONLY=$6
+
 
     if [ ! -f $MSD_STORE ]
     then
@@ -912,9 +914,14 @@ create_msd() {
     echo "Creating MSD gadget functionality"
     mkdir functions/$FUNCTION
     echo 1 > functions/$FUNCTION/stall
-    if $MSD_AUTO_MOUNT; then
+    if [ "$MSD_AUTO_MOUNT" = "true" ]; then
         mkdir -p /media/mass_storage
         mount -t vfat -o sync $MSD_STORE /media/mass_storage
+    fi
+    if [ "$MSD_READONLY" = "true" ]; then
+        echo 1 > functions/$FUNCTION/lun.0/ro
+    else
+        echo 0 > functions/$FUNCTION/lun.0/ro
     fi
     echo $MSD_STORE > functions/$FUNCTION/lun.0/file
     echo 1 > functions/$FUNCTION/lun.0/removable
@@ -1007,7 +1014,7 @@ bind_functions()
 
     if $USE_MSD; then
         echo "bind mass storage..."
-        create_msd configs/c.1 mass_storage.0 $MSD_FILE $MSD_BLOCK_SIZE $MSD_BLOCK_AUTO_MOUNT
+        create_msd configs/c.1 mass_storage.0 $MSD_FILE $MSD_BLOCK_SIZE $MSD_BLOCK_AUTO_MOUNT $MSD_BLOCK_READONLY
     fi
 
     if $USE_ACM; then
@@ -1056,7 +1063,7 @@ unbind_functions()
 
     if $USE_MSD; then
         echo "unbind mass storage..."
-        delete_msd configs/c.1 mass_storage.0 $MSD_FILE $MSD_BLOCK_SIZE $MSD_BLOCK_AUTO_MOUNT
+        delete_msd configs/c.1 mass_storage.0 $MSD_FILE $MSD_BLOCK_SIZE $MSD_BLOCK_AUTO_MOUNT $MSD_BLOCK_READONLY
     fi
 
     if $USE_ACM; then
