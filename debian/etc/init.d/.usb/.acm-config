@@ -12,13 +12,9 @@
 # to force Windows to enumerate the device again
 
 # default gadget information
-USB_VID=0x1d6b        # Vendor ID
-USB_PID=0x0102        # Product ID
+USB_VID=0x0525        # Vendor ID
+USB_PID=0xa4a2        # Product ID
 
 # options
-# Mass Storage Device
-USE_MSD=true
-MSD_FILE=/userdata/mass_storage.img
-MSD_BLOCK_SIZE=128              # 128M (1M per block)
-MSD_BLOCK_AUTO_MOUNT=true       # auto mount in /media/mass_storage
-MSD_BLOCK_READONLY=false
+# ACM
+USE_ACM=true

@@ -9,12 +9,10 @@
 # source /etc/init.d/.usb/.default-config
 
 # local definitions
-SERVICE=usb-gadget
-LOCKFILE=/var/run/usb-gadget.lock
 DEBUG=false
 
 # gadget default info
-SERIAL=0123456789ABCD
+SERIAL=""
 MANUF=hobot
 PRODUCT=sunrise5
 USE_UVC=false;
@@ -29,14 +27,6 @@ USE_ECM=false;
 IS_UVC_ISOC=false;
 IS_MULTI_FUNC=false;
 USE_MULT_ALTSETTING=false;
-
-# configfs related
-USB_GROUP=g_comp
-CONFIGFS=/sys/kernel/config
-GADGET=$CONFIGFS/usb_gadget
-USB_CONFIGFS=$GADGET/$USB_GROUP
-FUNCTIONS_DIR=$USB_CONFIGFS/functions
-USER_CONFIG=.default-config
 
 BOARD=$(strings /proc/device-tree/model)
 
@@ -78,15 +68,48 @@ case $BOARD in
     ;;
 esac
 
+case $0 in
+*usb3.0-gadget.sh)
+    echo "USB3.0 Gadget"
+    SERVICE=usb3.0-gadget
+    USB_GROUP=g_comp_usb3.0
+    UDC=$UDC_USB3
+    USB_TMP_CONFIG=.usb3.0-last-config
+    ;;
+*)
+    echo "USB2.0 Gadget"
+    SERVICE=usb-gadget
+    USB_GROUP=g_comp
+    UDC=$UDC_USB2
+    USB_TMP_CONFIG=.usb-last-config
+    ;;
+esac
+LOCKFILE=/var/run/$SERVICE.lock
+
+# configfs related
+CONFIGFS=/sys/kernel/config
+GADGET=$CONFIGFS/usb_gadget
+USB_CONFIGFS=$GADGET/$USB_GROUP
+FUNCTIONS_DIR=$USB_CONFIGFS/functions
+USER_CONFIG=.default-config
+
 echo "Detecting platform:"
 echo " board : $BOARD"
 echo " udc   : $UDC"
 
 # Overlay serial with hrut_socuid, hrut_duid, emmc serial number according to priority
-# SERIAL=$(hrut_duid)         # use hrut_duid as serial number
+SERIAL=$(cat /sys/class/socinfo/soc_uid)         # get soc_uid as serial number
+
+if [ -n "$SERIAL" ]; then
+    SERIAL=${SERIAL:2:31}  # Fetch 32-byte raw data (excluding leading 0x)
+fi
 
 if [ -z $SERIAL ]; then
-    SERIAL=0123456789ABCD
+    SERIAL=$(cat /sys/devices/platform/soc/35000000.hsio_apb/35040000.sdhci/mmc_host/mmc0/mmc0:0001/serial)
+
+    if [ -z $SERIAL ]; then
+        SERIAL=0123456789ABCD       # Use fixed serial number for other cases(eg. Nand Boot without emmc)
+    fi
 fi
 
 # make sure .usb-config is exist!
@@ -527,6 +550,8 @@ create_uvc() {
 	mkdir functions/$FUNCTION
 
 	create_frame $FUNCTION 1280 720 uncompressed u
+	create_frame $FUNCTION 640 480 uncompressed f h264
+	create_frame $FUNCTION 1088 1280 uncompressed f h264
 	create_frame $FUNCTION 1280 720 uncompressed f h264
 	create_frame $FUNCTION 1920 1080 uncompressed f h264
 	create_frame $FUNCTION 1280 720 mjpeg m
@@ -868,7 +893,7 @@ create_adb()
     CONFIG=$1
     FUNCTION=$2
 
-    echo "Creating ACM gadget functionality"
+    echo "Creating ADB gadget functionality"
     mkdir functions/$FUNCTION
 
     ln -s functions/$FUNCTION configs/c.1
@@ -900,6 +925,8 @@ create_msd() {
     MSD_STORE=$3
     MSD_BLOCK_SIZE=$4
     MSD_AUTO_MOUNT=$5
+    MSD_READONLY=$6
+
 
     if [ ! -f $MSD_STORE ]
     then
@@ -912,9 +939,14 @@ create_msd() {
     echo "Creating MSD gadget functionality"
     mkdir functions/$FUNCTION
     echo 1 > functions/$FUNCTION/stall
-    if $MSD_AUTO_MOUNT; then
+    if [ "$MSD_AUTO_MOUNT" = "true" ]; then
         mkdir -p /media/mass_storage
         mount -t vfat -o sync $MSD_STORE /media/mass_storage
+    fi
+    if [ "$MSD_READONLY" = "true" ]; then
+        echo 1 > functions/$FUNCTION/lun.0/ro
+    else
+        echo 0 > functions/$FUNCTION/lun.0/ro
     fi
     echo $MSD_STORE > functions/$FUNCTION/lun.0/file
     echo 1 > functions/$FUNCTION/lun.0/removable
@@ -974,6 +1006,11 @@ bind_functions()
     echo "Bind functions according to .usb-config file"
     # For win10 case, rndis must be the beginning interface of
     # multi-function gadget.
+    if $USE_UVC; then
+        echo "bind uvc..."
+        create_uvc configs/c.1 uvc.0
+    fi
+
     if $USE_RNDIS; then
         echo "bind gadget rndis..."
         create_rndis configs/c.1 rndis.0
@@ -990,14 +1027,14 @@ bind_functions()
         create_uac2 configs/c.1 uac2.0
     fi
 
-    if $USE_UVC; then
-        echo "bind uvc..."
-        create_uvc configs/c.1 uvc.0
-    fi
-
     if $USE_HID; then
         echo "bind hid..."
         create_hid configs/c.1 hid.0
+    fi
+
+    if $USE_ACM; then
+        echo "bind gadget serial..."
+        create_acm configs/c.1 acm.0
     fi
 
     if $USE_ADB; then
@@ -1007,12 +1044,7 @@ bind_functions()
 
     if $USE_MSD; then
         echo "bind mass storage..."
-        create_msd configs/c.1 mass_storage.0 $MSD_FILE $MSD_BLOCK_SIZE $MSD_BLOCK_AUTO_MOUNT
-    fi
-
-    if $USE_ACM; then
-        echo "bind gadget serial..."
-        create_acm configs/c.1 acm.0
+        create_msd configs/c.1 mass_storage.0 $MSD_FILE $MSD_BLOCK_SIZE $MSD_BLOCK_AUTO_MOUNT $MSD_BLOCK_READONLY
     fi
 
     if $USE_ECM; then
@@ -1024,6 +1056,12 @@ bind_functions()
 unbind_functions()
 {
     echo "Unbind functions according to .usb-config file"
+
+    if $USE_UVC; then
+        echo "unbind uvc..."
+        delete_uvc configs/c.1 uvc.0
+    fi
+
     if $USE_RNDIS; then
         echo "unbind gadget rndis..."
         delete_rndis configs/c.1 rndis.0
@@ -1039,11 +1077,6 @@ unbind_functions()
         delete_uac2 configs/c.1 uac2.0
     fi
 
-    if $USE_UVC; then
-        echo "unbind uvc..."
-        delete_uvc configs/c.1 uvc.0
-    fi
-
     if $USE_HID; then
         echo "unbind hid..."
         delete_hid configs/c.1 hid.0
@@ -1056,7 +1089,7 @@ unbind_functions()
 
     if $USE_MSD; then
         echo "unbind mass storage..."
-        delete_msd configs/c.1 mass_storage.0 $MSD_FILE $MSD_BLOCK_SIZE $MSD_BLOCK_AUTO_MOUNT
+        delete_msd configs/c.1 mass_storage.0 $MSD_FILE $MSD_BLOCK_SIZE $MSD_BLOCK_AUTO_MOUNT $MSD_BLOCK_READONLY
     fi
 
     if $USE_ACM; then
@@ -1078,14 +1111,14 @@ pre_run_binary()
         mount -o uid=2000,gid=2000 -t functionfs adb /dev/usb-ffs/adb
         start-stop-daemon -S -b -q -n adbd -a /usr/bin/adbd
 
-        echo 3
+        return 1
     fi
 
     if $USE_UVC; then
         # some base board without oscillator needs command "camera_test 3 1 1 1"
         $UVC_PRE_EXEC
 
-        echo 0
+        return 0
     fi
 
     echo 0
@@ -1107,7 +1140,7 @@ start_usb_gadget()
     modprobe libcomposite
     #modprobe g_ether
     #rmmod g_ether
-    sleep 0.3
+    #sleep 0.3
 
     #Mount ConfigFS and create Gadget
     echo "Mount ConfigFS and create Gadget"
@@ -1147,13 +1180,14 @@ start_usb_gadget()
     for i in `seq 0 $?`
     do
         echo "."
-        sleep 0.3
+        sleep 0.1
     done
 
     echo "OK"
 
     echo "Binding USB Device Controller"
     echo $UDC > UDC
+    echo "UDC set to: $UDC"
     echo peripheral > $UDC_ROLE
     cat $UDC_ROLE
     echo "OK"
@@ -1164,7 +1198,7 @@ start_usb_gadget()
 
 stop_usb_gadget()
 {
-    echo "Stoping & Delete usb-gadget g_comp"
+    echo "Stoping & Delete $SERVICE $USB_GROUP"
     if $USE_UVC; then
         # let user launch/stop uvc app (as many sensors and params, easy for debug...)
         # start-stop-daemon -K -s 9 -n $UVC_APP
@@ -1179,6 +1213,7 @@ stop_usb_gadget()
     done
 
     cd $USB_CONFIGFS
+    echo "cd $USB_CONFIGFS"
     if [ $? -ne 0 ]; then
         echo "Error creating usb gadget in configfs"
         exit 1
@@ -1203,6 +1238,9 @@ stop_usb_gadget()
     rmdir $USB_CONFIGFS
 
     if $USE_ADB; then
+        # Uninstall the functionfs file system
+        umount /dev/usb-ffs/adb 2>/dev/null
+        rmdir /dev/usb-ffs/adb 2>/dev/null
         start-stop-daemon -K -q -n adbd
     fi
 }
@@ -1240,6 +1278,9 @@ usage()
     echo "      msd-uac1                    msd + uac1 composite gadget"
     echo "      hid-uac1                    hid + uac1 composite gadget"
     echo "      uvc-adb                     uvc + adb composite gadget"
+    echo "      rndis-adb                   rndis + adb composite gadget"
+    echo "      hid-adb                     hid + adb composite gadget"
+    echo "      acm-adb                     acm + adb composite gadget"
 }
 
 # init script entry
@@ -1290,6 +1331,8 @@ start)
             USER_CONFIG=.rndis-ecm-config
         elif [ $2 == "rndis-ecm-msd" ]; then
             USER_CONFIG=.rndis-ecm-msd-config
+        elif [ $2 == "acm" ]; then
+            USER_CONFIG=.acm-config
         elif [ $2 == "uvc-rndis" ]; then
             USER_CONFIG=.uvc-rndis-config
         elif [ $2 == "uvc-rndis-uac1" ]; then
@@ -1320,6 +1363,12 @@ start)
             USER_CONFIG=.hid-uac1-config
         elif [ $2 == "uvc-adb" ]; then
             USER_CONFIG=.uvc-adb-config
+        elif [ $2 == "rndis-adb" ]; then
+            USER_CONFIG=.rndis-adb-config
+        elif [ $2 == "hid-adb" ]; then
+            USER_CONFIG=.hid-adb-config
+        elif [ $2 == "acm-adb" ]; then
+            USER_CONFIG=.acm-adb-config
         else
             echo "No matched options($2)!! please check your command."
             exit 3
@@ -1327,23 +1376,23 @@ start)
     fi
 
     # backup user-config for stop usage (ignore the changes before restart)
-    if [ $USER_CONFIG != "/tmp/.usb-last-config" ]; then
-        cp /etc/init.d/.usb/$USER_CONFIG /tmp/.usb-last-config
+    if [ $USER_CONFIG != "/tmp/$USB_TMP_CONFIG" ]; then
+        cp /etc/init.d/.usb/$USER_CONFIG /tmp/$USB_TMP_CONFIG
     fi
 
     # check if using uvc isoc mode
     if [ ! -z $3 ]; then
         if [ $3 == "isoc" ] || [ $3 == "ISOC" ]; then
             echo "Using isoc transfer for uvc! default mult(3), burst(0)"
-            sed -i 's/UVC_BULK=true/UVC_BULK=false/g' /tmp/.usb-last-config
-            sed -i 's/BURST_NUM=9/BURST_NUM=10/g' /tmp/.usb-last-config
-            sed -i -e '$a\ISOC_MULT=3' /tmp/.usb-last-config
-            sed -i -e '$a\IS_UVC_ISOC=true' /tmp/.usb-last-config
+            sed -i 's/UVC_BULK=true/UVC_BULK=false/g' /tmp/$USB_TMP_CONFIG
+            sed -i 's/BURST_NUM=9/BURST_NUM=10/g' /tmp/$USB_TMP_CONFIG
+            sed -i -e '$a\ISOC_MULT=3' /tmp/$USB_TMP_CONFIG
+            sed -i -e '$a\IS_UVC_ISOC=true' /tmp/$USB_TMP_CONFIG
         fi
     fi
 
     # source user-config
-    . /tmp/.usb-last-config
+    . /tmp/$USB_TMP_CONFIG
 
     show_user_config
 
@@ -1369,7 +1418,9 @@ stop)
     # re-source .usb-last-config again.
     # only system reboot will remove /tmp/.usb-last-config, which means
     # next /etc/init.d/usb-gadget.sh start command will lunch last config
-    . /tmp/.usb-last-config
+    . /tmp/$USB_TMP_CONFIG
+
+    show_user_config
 
     # stop the usb gadget
     stop_usb_gadget
@@ -1390,6 +1441,7 @@ status)
     ;;
 
 restart|reload)
+
     if [ -e $LOCKFILE ]; then
         if [ -z $2 ]; then
             $0 stop
@@ -1409,6 +1461,11 @@ restart|reload)
     fi
 
     echo "usb-gadget restart succeed."
+    ;;
+
+auto_restart)
+    echo $UDC > $USB_CONFIGFS/UDC
+    echo "usb-gadget auto restart succeed."
     ;;
 
 help)
