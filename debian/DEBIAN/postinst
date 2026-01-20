@@ -1,6 +1,13 @@
 #!/bin/bash
 
+# === X3_START ===
+update-rc.d hobot-adbd defaults
+systemctl --no-reload enable hobot-adbd.service
+# === X3_END ===
+
+# === X5_START ===
 systemctl enable hobot-usb-gadget.service
 systemctl start hobot-usb-gadget.service
+# === X5_END ===
 
 exit 0

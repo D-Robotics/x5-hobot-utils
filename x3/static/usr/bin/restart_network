@@ -1,0 +1,10 @@
+#!/bin/bash -e
+
+echo "Reload NetworkManager connection..."
+nmcli connection reload
+
+echo "Restarting netplan-eth0..."
+nmcli connection down netplan-eth0 || true
+nmcli connection up netplan-eth0
+
+echo "Network restart done"
