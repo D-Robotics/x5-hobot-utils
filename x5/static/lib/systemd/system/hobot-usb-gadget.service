@@ -3,8 +3,15 @@ Description=Start usb gadget at startup.
 After=multi-user.target
 
 [Service]
-Type=simple
-ExecStart= /etc/init.d/usb-gadget.sh start rndis-ecm-msd &
+# Type=oneshot + RemainAfterExit: the script sets up configfs, starts adbd
+# (start-stop-daemon -b) and returns. oneshot does not tear down the cgroup
+# afterwards, so adbd is not killed (the former Type=simple + trailing '&' +
+# default KillMode=control-group killed adbd right after the script exited).
+# ExecStop tears the gadget down cleanly (incl. stopping adbd) on shutdown.
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/etc/init.d/usb-gadget.sh start rndis-ecm-msd-adb
+ExecStop=/etc/init.d/usb-gadget.sh stop
 
 [Install]
 WantedBy=multi-user.target
