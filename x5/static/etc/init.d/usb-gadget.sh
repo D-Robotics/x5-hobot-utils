@@ -1281,6 +1281,7 @@ usage()
     echo "      rndis-adb                   rndis + adb composite gadget"
     echo "      hid-adb                     hid + adb composite gadget"
     echo "      acm-adb                     acm + adb composite gadget"
+    echo "      rndis-ecm-msd-adb           rndis + ecm + msd + adb composite gadget"
 }
 
 # init script entry
@@ -1369,6 +1370,8 @@ start)
             USER_CONFIG=.hid-adb-config
         elif [ $2 == "acm-adb" ]; then
             USER_CONFIG=.acm-adb-config
+        elif [ $2 == "rndis-ecm-msd-adb" ]; then
+            USER_CONFIG=.rndis-ecm-msd-adb-config
         else
             echo "No matched options($2)!! please check your command."
             exit 3
